@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Classifier</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            background-color: #ffffff;
+            padding: 100px;
+            border-radius: 30px;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+        }
+        img {
+            max-width: 500px;
+            margin-bottom: 50px;
+        }
+        input[type="file"] {
+            margin-bottom: 50px;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        #nutritional-info {
+            font-size: 1.2rem;
+            margin-top: 20px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+        #chatbot-response {
+            margin-top: 80px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Food Classifier 🍽️</h1>
+        <img id="food-image" src="" alt="Uploaded Image">
+        <form id="predictForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="file" accept="image/*" required>
+            <br>
+            <button type="submit">Predict Food</button>
+        </form>
+
+        <div id="prediction">
+            <p id="predictionResult"></p>
+            <div id="nutritional-info"></div>
+        </div>
+
+        <form id="chatbotForm">
+            <input type="text" id="chatInput" placeholder="Ask about the food..." style="width: 80%;" required>
+            <br>
+            <button type="submit">Ask Chatbot</button>
+        </form>
+
+        <p id="chatbot-response"></p>
+    </div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('food-image').src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('predictForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            let formData = new FormData();
+            formData.append("file", document.getElementById('fileInput').files[0]);
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('predictionResult').innerText = `Predicted Food: ${data.prediction}`;
+                document.getElementById('nutritional-info').innerHTML = `
+                    - Calories: ~${data.calories} kcal <br>
+                    - Total Fat: ~${data.totalFat} grams <br>
+                    - Saturated Fat: ~${data.saturatedFat} grams <br>
+                    - Protein: ~${data.protein} grams
+                `;
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        document.getElementById('chatbotForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const question = document.getElementById('chatInput').value;
+
+            fetch('/chatbot', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ question: question })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('chatbot-response').innerText = `Chatbot: ${data.response}`;
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+</body>
+</html>
