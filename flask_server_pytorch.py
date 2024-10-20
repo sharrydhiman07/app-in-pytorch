@@ -1,10 +1,9 @@
 from flask import Flask, request, jsonify, render_template
 from PIL import Image
 import torch
-import os
-import json
 from torchvision import transforms
 import torch.nn as nn
+from flask_cors import CORS
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 # Load Flan-T5 model for chatbot
@@ -15,7 +14,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 chatbot_model.to(device)
 
 # Load food classification model
-model_path = 'C:/Users/sharr/OneDrive/Desktop/NLP pytorch/final_food_model.pth'
+model_path = 'final_food_model.pth'
 
 class FoodClassificationModel(nn.Module):
     def __init__(self):
@@ -63,12 +62,13 @@ def preprocess_image(image):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     image = transform(image).unsqueeze(0)  # Add batch dimension
     return image
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for cross-origin requests
 
 # Store the last predicted food globally
 predicted_food_global = None
@@ -79,47 +79,52 @@ def index():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    global predicted_food_global  # Use the global variable to store prediction
+    global predicted_food_global
 
-    file = request.files['file']
-    if file:
-        image = Image.open(file.stream).convert('RGB')
-        processed_image = preprocess_image(image)
+    try:
+        file = request.files['file']
+        if file:
+            image = Image.open(file.stream).convert('RGB')
+            processed_image = preprocess_image(image)
 
-        # Predict using the PyTorch model
-        with torch.no_grad():
-            output = model(processed_image)
-            _, predicted_class = torch.max(output, 1)
+            # Predict using the PyTorch model
+            with torch.no_grad():
+                output = model(processed_image)
+                _, predicted_class = torch.max(output, 1)
 
-        class_labels = ['pancake', 'pizza', 'pasta', 'French fries', 'donut']
-        predicted_food = class_labels[predicted_class.item()]
-        predicted_food_global = predicted_food  # Store predicted food
+            class_labels = ['pancake', 'pizza', 'pasta', 'French fries', 'donut']
+            predicted_food = class_labels[predicted_class.item()]
+            predicted_food_global = predicted_food  # Store predicted food
 
-        # Retrieve nutritional information
-        nutrition_info = nutritional_data[predicted_food]
+            # Retrieve nutritional information
+            nutrition_info = nutritional_data[predicted_food]
 
-        return jsonify({
-            'prediction': predicted_food,
-            'calories': nutrition_info['calories'],
-            'totalFat': nutrition_info['totalFat'],
-            'saturatedFat': nutrition_info['saturatedFat'],
-            'protein': nutrition_info['protein']
-        })
+            return jsonify({
+                'prediction': predicted_food,
+                'calories': nutrition_info['calories'],
+                'totalFat': nutrition_info['totalFat'],
+                'saturatedFat': nutrition_info['saturatedFat'],
+                'protein': nutrition_info['protein']
+            })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/chatbot', methods=['POST'])
 def chatbot():
-    global predicted_food_global  # Access the global variable
+    global predicted_food_global
+
+    if predicted_food_global is None:
+        return jsonify({'response': 'Please predict the food before asking questions.'})
 
     data = request.get_json()
     question = data['question']
 
-    # Ensure the question is related to the predicted food
     if predicted_food_global.lower() not in question.lower():
         return jsonify({
             'response': f"I can only answer questions related to {predicted_food_global}. Please ask something about {predicted_food_global}."
         })
 
-    # Assuming 'food_info' is fetched based on the food predicted earlier
     context = f"Information about {predicted_food_global}"
 
     # Tokenize the input and create prompt
